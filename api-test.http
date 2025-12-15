@@ -1,0 +1,17 @@
+### 1. 메모 생성 (정상 케이스)
+POST http://localhost:3000/memos
+Content-Type: application/json
+
+{
+  "title": "Onix 프로젝트 첫 메모",
+  "content": "WebStorm HTTP Client로 테스트 중입니다. 정말 편하네요."
+}
+
+### 2. 메모 생성 실패 (유효성 검사 테스트 - 제목 없음)
+POST http://localhost:3000/memos
+Content-Type: application/json
+
+{
+  "title": "",
+  "content": "이 요청은 실패해야 합니다."
+}
