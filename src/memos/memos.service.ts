@@ -43,10 +43,22 @@ export class MemosService {
         return await this.memoRepository.save(memo);
     }
 
-    async remove(id: string) {
+    async softDelete(id: string) {
         await this.findOne(id)
 
         await this.memoRepository.softDelete(id);
+
+        const deletedMemo =  await this.memoRepository.findOne({
+            where: {id},
+            withDeleted: true,
+        });
+
+        if (!deletedMemo) {
+            throw new NotFoundException(`Failed to retrieve soft-deleted memo with ID ${id}`);
+        }
+
+        return deletedMemo;
+
     }
 
 

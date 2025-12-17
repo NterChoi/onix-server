@@ -30,7 +30,7 @@ export class MemosController {
     }
 
     @Delete(':id')
-    remove(@Param('id') id: string) {
-        return this.memosService.remove(id);
+    softDelete(@Param('id') id: string) {
+        return this.memosService.softDelete(id);
     }
 }
