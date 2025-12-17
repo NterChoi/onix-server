@@ -7,6 +7,11 @@ Content-Type: application/json
   "content": "WebStorm HTTP Client로 테스트 중입니다. 정말 편하네요."
 }
 
+> {%
+    // 응답에서 id를 꺼내서 'memoId'라는 변수에 저장해라!
+    client.global.set("memoId", response.body.id);
+%}
+
 ### 2. 메모 생성 실패 (유효성 검사 테스트 - 제목 없음)
 POST http://localhost:3000/memos
 Content-Type: application/json
@@ -15,3 +20,53 @@ Content-Type: application/json
   "title": "",
   "content": "이 요청은 실패해야 합니다."
 }
+
+### 3. 메모 업데이트 성공
+PATCH http://localhost:3000/memos/{{memoId}}
+Content-Type: application/json
+
+{
+  "title" : "변경된 제목",
+  "content" : "변경된 내용"
+}
+
+### 4. 메모 업데이트 실패 (존재하지 않는 ID - 404)
+# 일부러 가짜 UUID(ffff...)를 넣어서 404 에러를 유도합니다.
+PATCH http://localhost:3000/memos/ffffffff-ffff-ffff-ffff-ffffffffffff
+Content-Type: application/json
+
+{
+  "title": "이 요청은 실패해야 합니다"
+}
+
+### 5. 메모 업데이트 실패 (잘못된 데이터 타입 - 400)
+# 제목에 숫자를 넣어서 유효성 검사(IsString) 실패를 유도합니다.
+PATCH http://localhost:3000/memos/{{memoId}}
+Content-Type: application/json
+
+{
+  "title": 12345,
+  "content": "내용은 정상"
+}
+
+### 6. 모든 메모 조회 성공
+GET http://localhost:3000/memos
+Content-Type: application/json
+
+### 7. 특정 메모 조회 성공
+GET http://localhost:3000/memos/{{memoId}}
+Content-Type: application/json
+
+### 8. 특정 메모 조회 실패 (존재하지 않는 ID - 404)
+GET http://localhost:3000/memos/ffffffff-ffff-ffff-ffff-ffffffffffff
+Content-Type: application/json
+
+### 9. 메모 삭제 성공
+DELETE http://localhost:3000/memos/{{memoId}}
+
+### 10. 메모 삭제 실패
+DELETE http://localhost:3000/memos/{{memoId}}
+
+### 11. 메모 삭제 성공 후 조회 실패
+GET http://localhost:3000/memos/{{memoId}}
+Content-Type: application/json

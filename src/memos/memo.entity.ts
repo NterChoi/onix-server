@@ -20,13 +20,13 @@ export class Memo{
     content: string;
 
     @VersionColumn()
-    Version: number;
+    version: number;
 
     @CreateDateColumn()
-    CreatedAt: Date;
+    createdAt: Date;
 
     @UpdateDateColumn()
-    UpdatedAt: Date;
+    updatedAt: Date;
 
     @DeleteDateColumn()
     deletedAt: Date | null;
