@@ -1,0 +1,8 @@
+### 1. 회원가입 성공
+POST http://localhost:3000/users
+Content-Type: application/json
+
+{
+  "email" : "test@example.com",
+  "password" : "password123"
+}
