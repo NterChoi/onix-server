@@ -27,6 +27,10 @@ Content-Type: application/json
   "password": "{{password}}"
 }
 
+> {%
+    client.global.set('jwt_token', response.body.access_token);
+%}
+
 ### 3. 로그인 실패 테스트 (잘못된 비밀번호)
 # @name signInFailure
 POST {{host}}/auth/login
@@ -36,3 +40,12 @@ Content-Type: application/json
   "email": "{{email}}",
   "password": "wrongpassword"
 }
+
+### 4. 가드 성공 테스트
+# Requires a valid JWT token
+GET {{host}}/auth/profile
+Authorization: Bearer {{jwt_token}}
+
+### 5. 가드 실패 테스트
+# No token provived
+GET {{host}}/auth/profile
