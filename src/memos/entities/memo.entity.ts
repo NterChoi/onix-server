@@ -2,11 +2,12 @@ import {
     Column,
     CreateDateColumn,
     DeleteDateColumn,
-    Entity,
+    Entity, JoinColumn, ManyToOne,
     PrimaryGeneratedColumn,
     UpdateDateColumn,
     VersionColumn
 } from "typeorm";
+import {User} from "../../users/entities/user.entity";
 
 @Entity('memos')
 export class Memo{
@@ -30,4 +31,11 @@ export class Memo{
 
     @DeleteDateColumn()
     deletedAt: Date | null;
+
+    @Column({ type: 'uuid', name: 'user_id', comment: '사용자 ID'})
+    userId: string;
+
+    @ManyToOne(() => User, (user) => user.memos, {onDelete: 'CASCADE'})
+    @JoinColumn({name: 'user_id'})
+    user: User;
 }

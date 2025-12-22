@@ -1,4 +1,13 @@
-import {Column, CreateDateColumn, DeleteDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn} from "typeorm";
+import {
+    Column,
+    CreateDateColumn,
+    DeleteDateColumn,
+    Entity,
+    OneToMany,
+    PrimaryGeneratedColumn,
+    UpdateDateColumn
+} from "typeorm";
+import {Memo} from "../../memos/entities/memo.entity";
 
 @Entity('users')
 export class User {
@@ -19,4 +28,7 @@ export class User {
 
     @DeleteDateColumn()
     deletedAt: Date;
+
+    @OneToMany(() => Memo, (memo) => memo.user)
+    memos: Memo[]
 }

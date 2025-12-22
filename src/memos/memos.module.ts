@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import {TypeOrmModule} from "@nestjs/typeorm";
-import {Memo} from "./memo.entity";
+import {Memo} from "./entities/memo.entity";
 import { MemosService } from './memos.service';
 import { MemosController } from './memos.controller';
 

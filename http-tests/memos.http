@@ -1,72 +1,97 @@
-### 1. 메모 생성 (정상 케이스)
-POST http://localhost:3000/memos
+###
+# ==============================================================================
+# Onix Memo API Test (with Authorization)
+# ==============================================================================
+
+###
+# STEP 0-A: 테스트용 사용자 A 생성 (이미 존재하면 409 Conflict, 괜찮음)
+# @name createUserA
+POST http://localhost:3000/users
 Content-Type: application/json
 
 {
-  "title": "Onix 프로젝트 첫 메모",
-  "content": "WebStorm HTTP Client로 테스트 중입니다. 정말 편하네요."
+  "email": "user-a@test.com",
+  "password": "password-a"
+}
+
+###
+# STEP 0-B: 테스트용 사용자 B 생성 (이미 존재하면 409 Conflict, 괜찮음)
+# @name createUserB
+POST http://localhost:3000/users
+Content-Type: application/json
+
+{
+  "email": "user-b@test.com",
+  "password": "password-b"
+}
+
+###
+# ==============================================================================
+# TEST SCENARIO: A가 만든 메모를 B가 조회/수정/삭제할 수 없는가?
+# ==============================================================================
+
+###
+# STEP 1: 사용자 A로 로그인
+# @name loginA
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "email": "user-a@test.com",
+  "password": "password-a"
 }
 
 > {%
-    // 응답에서 id를 꺼내서 'memoId'라는 변수에 저장해라!
-    client.global.set("memoId", response.body.id);
+    client.global.set('token_A', response.body.access_token);
 %}
 
-### 2. 메모 생성 실패 (유효성 검사 테스트 - 제목 없음)
+###
+# STEP 2: 사용자 A로 메모 생성
+# @name createMemoByA
 POST http://localhost:3000/memos
 Content-Type: application/json
+Authorization: Bearer {{token_A}}
 
 {
-  "title": "",
-  "content": "이 요청은 실패해야 합니다."
+  "title": "A가 작성한 비밀 메모",
+  "content": "이 내용은 B가 보면 안됩니다."
 }
 
-### 3. 메모 업데이트 성공
-PATCH http://localhost:3000/memos/{{memoId}}
-Content-Type: application/json
+> {%
+    client.global.set('memo_id_by_A', response.body.id);
+%}
 
-{
-  "title" : "변경된 제목",
-  "content" : "변경된 내용"
-}
 
-### 4. 메모 업데이트 실패 (존재하지 않는 ID - 404)
-# 일부러 가짜 UUID(ffff...)를 넣어서 404 에러를 유도합니다.
-PATCH http://localhost:3000/memos/ffffffff-ffff-ffff-ffff-ffffffffffff
+###
+# STEP 3: 사용자 B로 로그인
+# @name loginB
+POST http://localhost:3000/auth/login
 Content-Type: application/json
 
 {
-  "title": "이 요청은 실패해야 합니다"
+  "email": "user-b@test.com",
+  "password": "password-b"
 }
 
-### 5. 메모 업데이트 실패 (잘못된 데이터 타입 - 400)
-# 제목에 숫자를 넣어서 유효성 검사(IsString) 실패를 유도합니다.
-PATCH http://localhost:3000/memos/{{memoId}}
-Content-Type: application/json
+> {%
+    client.global.set('token_B', response.body.access_token);
+%}
 
-{
-  "title": 12345,
-  "content": "내용은 정상"
-}
 
-### 6. 모든 메모 조회 성공
-GET http://localhost:3000/memos
-Content-Type: application/json
+###
+# STEP 4: [핵심 테스트] 사용자 B가 사용자 A의 메모 조회를 시도 (403 Forbidden 예상)
+# @name getMemoByB
+GET http://localhost:3000/memos/{{memo_id_by_A}}
+Authorization: Bearer {{token_B}}
 
-### 7. 특정 메모 조회 성공
-GET http://localhost:3000/memos/{{memoId}}
-Content-Type: application/json
 
-### 8. 특정 메모 조회 실패 (존재하지 않는 ID - 404)
-GET http://localhost:3000/memos/ffffffff-ffff-ffff-ffff-ffffffffffff
-Content-Type: application/json
+###
+# ==============================================================================
+# 부가 테스트: 자기 자신의 메모는 잘 조회되는가?
+# ==============================================================================
 
-### 9. 메모 삭제 성공
-DELETE http://localhost:3000/memos/{{memoId}}
-
-### 10. 메모 삭제 실패
-DELETE http://localhost:3000/memos/{{memoId}}
-
-### 11. 메모 삭제 성공 후 조회 실패
-GET http://localhost:3000/memos/{{memoId}}
-Content-Type: application/json
+###
+# STEP 5: 사용자 A가 자기 메모 조회를 시도 (200 OK 예상)
+# @name getMemoByA
+GET http://localhost:3000/memos/{{memo_id_by_A}}
+Authorization: Bearer {{token_A}}

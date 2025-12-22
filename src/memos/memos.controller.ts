@@ -1,36 +1,45 @@
-import {Body, Controller, Delete, Get, Param, Patch, Post} from '@nestjs/common';
+import {Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards} from '@nestjs/common';
 import {MemosService} from "./memos.service";
 import {CreateMemoDto} from "./dto/create-memo.dto";
 import {UpdateMemoDto} from "./dto/update-memo.dto";
+import {AuthGuard} from "../auth/auth.guard";
 
 @Controller('memos')
+@UseGuards(AuthGuard)
 export class MemosController {
     constructor(private readonly memosService: MemosService) {
     }
 
     @Post()
-    create(@Body() createMemoDto: CreateMemoDto) {
-        return this.memosService.create(createMemoDto);
+    create(@Req() req, @Body() createMemoDto: CreateMemoDto) {
+        const userId = req.user.sub;
+        return this.memosService.create(createMemoDto, userId);
     }
 
     @Get()
-    findAll() {
-        return this.memosService.findAll();
+    findAll(@Req() req) {
+        const userId = req.user.sub;
+        return this.memosService.findAll(userId);
     }
 
     @Get(':id')
-    findOne(@Param('id') id: string) {
-        return this.memosService.findOne(id);
+    findOne(@Param('id') id: string, @Req() req) {
+        const userId = req.user.sub;
+        return this.memosService.findOne(id, userId);
     }
 
     @Patch(':id')
     update(@Param('id') id: string,
-           @Body() updateMemoDto: UpdateMemoDto) {
-        return this.memosService.update(id, updateMemoDto);
+           @Body() updateMemoDto: UpdateMemoDto,
+           @Req() req
+           ) {
+        const userId = req.user.sub;
+        return this.memosService.update(id, updateMemoDto, userId);
     }
 
     @Delete(':id')
-    softDelete(@Param('id') id: string) {
-        return this.memosService.softDelete(id);
+    softDelete(@Param('id') id: string, @Req() req) {
+        const userId = req.user.sub;
+        return this.memosService.softDelete(id, userId);
     }
 }
