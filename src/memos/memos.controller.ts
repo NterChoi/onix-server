@@ -3,6 +3,7 @@ import {MemosService} from "./memos.service";
 import {CreateMemoDto} from "./dto/create-memo.dto";
 import {UpdateMemoDto} from "./dto/update-memo.dto";
 import {AuthGuard} from "../auth/auth.guard";
+import {PullMemoDto} from "./dto/pull-memo.dto";
 
 @Controller('memos')
 @UseGuards(AuthGuard)
@@ -41,5 +42,11 @@ export class MemosController {
     softDelete(@Param('id') id: string, @Req() req) {
         const userId = req.user.sub;
         return this.memosService.softDelete(id, userId);
+    }
+
+    @Post('pull')
+    pull(@Req() req, @Body() pullMemoDto: PullMemoDto) {
+        const userId = req.user.sub;
+        return this.memosService.pull(userId, pullMemoDto.lastPulledAt);
     }
 }

@@ -23,13 +23,13 @@ export class Memo{
     @VersionColumn()
     version: number;
 
-    @CreateDateColumn()
+    @CreateDateColumn({ precision: 6})
     createdAt: Date;
 
-    @UpdateDateColumn()
+    @UpdateDateColumn({ precision: 6})
     updatedAt: Date;
 
-    @DeleteDateColumn()
+    @DeleteDateColumn({ precision: 6})
     deletedAt: Date | null;
 
     @Column({ type: 'uuid', name: 'user_id', comment: '사용자 ID'})

@@ -95,3 +95,136 @@ Authorization: Bearer {{token_B}}
 # @name getMemoByA
 GET http://localhost:3000/memos/{{memo_id_by_A}}
 Authorization: Bearer {{token_A}}
+###
+# ==============================================================================
+# TEST SCENARIO: 동기화 PULL API 테스트
+# ==============================================================================
+
+###
+# STEP SYNC-1: 사용자 A로 로그인 (이미 로그인 상태면 토큰 재사용)
+# @name loginAForSync
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "email": "user-a@test.com",
+  "password": "password-a"
+}
+
+> {%
+    client.global.set('token_A', response.body.access_token);
+%}
+
+###
+# STEP SYNC-2: 테스트용 새 메모 2개 생성 (Sync Memo 1, 2)
+# @name createSyncMemo1
+POST http://localhost:3000/memos
+Content-Type: application/json
+Authorization: Bearer {{token_A}}
+
+{
+  "title": "Sync Test Memo 1",
+  "content": "Initial content for sync test 1"
+}
+
+> {%
+    client.global.set('sync_memo_1_id', response.body.id);
+%}
+
+###
+# @name createSyncMemo2
+POST http://localhost:3000/memos
+Content-Type: application/json
+Authorization: Bearer {{token_A}}
+
+{
+  "title": "Sync Test Memo 2",
+  "content": "Initial content for sync test 2"
+}
+
+> {%
+    client.global.set('sync_memo_2_id', response.body.id);
+%}
+
+###
+# STEP SYNC-3: 최초 동기화 (lastPulledAt: null)
+# >> 응답의 changes.updated에 위에서 만든 메모 2개가 모두 포함되어야 함.
+# @name pullFirstTime
+POST http://localhost:3000/memos/pull
+Content-Type: application/json
+Authorization: Bearer {{token_A}}
+
+{
+  "lastPulledAt": null
+}
+
+> {%
+    // 다음 요청을 위해 서버가 알려준 최신 동기화 시간을 변수에 저장
+    client.global.set('latest_pulled_at', response.body.latestPulledAt);
+    client.test("최초 동기화 시, 새로 만든 2개의 메모가 포함되어야 함", function() {
+        client.assert(response.status === 201, "Response status is not 201");
+        client.assert(response.body.changes.updated.length >= 2, "최소 2개 이상의 메모가 updated에 있어야 함");
+    });
+%}
+
+###
+# STEP SYNC-4: 데이터 변경 (메모 1 수정, 메모 2 삭제, 메모 3 생성)
+# @name updateSyncMemo1
+PATCH http://localhost:3000/memos/{{sync_memo_1_id}}
+Content-Type: application/json
+Authorization: Bearer {{token_A}}
+
+{
+  "content": "Updated content for sync test 1"
+}
+
+###
+# @name deleteSyncMemo2
+DELETE http://localhost:3000/memos/{{sync_memo_2_id}}
+Authorization: Bearer {{token_A}}
+
+###
+# @name createSyncMemo3
+POST http://localhost:3000/memos
+Content-Type: application/json
+Authorization: Bearer {{token_A}}
+
+{
+  "title": "Sync Test Memo 3 (New)",
+  "content": "This memo was created after the first pull."
+}
+
+> {%
+    client.global.set('sync_memo_3_id', response.body.id);
+%}
+
+
+###
+# STEP SYNC-5: 두 번째 동기화 (lastPulledAt 사용)
+# >> 응답의 changes.updated에는 '수정된 메모1'과 '새로 생성된 메모3'이,
+# >> changes.deleted에는 '삭제된 메모2의 id'가 포함되어야 함.
+# @name pullSecondTime
+POST http://localhost:3000/memos/pull
+Content-Type: application/json
+Authorization: Bearer {{token_A}}
+
+{
+  "lastPulledAt": "{{latest_pulled_at}}"
+}
+
+> {%
+    client.test("두 번째 동기화 결과 검증", function() {
+        const updated = response.body.changes.updated;
+        const deleted = response.body.changes.deleted;
+
+        const updatedIds = updated.map(m => m.id);
+        
+        client.assert(response.status === 201, "Response status is not 201");
+        // 수정된 메모 1 포함 여부
+        client.assert(updatedIds.includes(client.global.get('sync_memo_1_id')), "updated 목록에 수정된 메모 1이 없습니다.");
+        // 새로 생성된 메모 3 포함 여부
+        client.assert(updatedIds.includes(client.global.get('sync_memo_3_id')), "updated 목록에 새로 생성된 메모 3이 없습니다.");
+        // 삭제된 메모 2 포함 여부
+        client.assert(deleted.includes(client.global.get('sync_memo_2_id')), "deleted 목록에 삭제된 메모 2의 ID가 없습니다.");
+    });
+%}

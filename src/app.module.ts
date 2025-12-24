@@ -31,6 +31,7 @@ import { AuthModule } from './auth/auth.module';
 
         // 개발 환경에서만 true! (서버 켤 때마다 DB 스키마를 코드에 맞게 뜯어고침)
         synchronize: true,
+        timezone: 'Z'
       }),
     }),
 

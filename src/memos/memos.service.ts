@@ -1,7 +1,7 @@
 import {ForbiddenException, Injectable, NotFoundException} from '@nestjs/common';
 import {InjectRepository} from "@nestjs/typeorm";
 import {Memo} from "./entities/memo.entity";
-import {Repository} from "typeorm";
+import {MoreThan, MoreThanOrEqual, Repository} from "typeorm";
 import {CreateMemoDto} from "./dto/create-memo.dto";
 import {UpdateMemoDto} from "./dto/update-memo.dto";
 
@@ -69,4 +69,34 @@ export class MemosService {
     }
 
 
+    async pull(userId: string, lastPulledAt: Date | null) {
+        const serverTime = new Date();
+        const safeLastPulledAt = lastPulledAt || new Date(0);
+
+        const updated = await this.memoRepository.find({
+            where: {
+                userId,
+                updatedAt: MoreThan(safeLastPulledAt),
+            },
+        });
+
+        const deletedResult = await this.memoRepository.find({
+            where: {
+                userId,
+                deletedAt: MoreThan(safeLastPulledAt),
+            },
+            withDeleted: true,
+            select: ['id']
+        });
+
+        const deleteIds = deletedResult.map(memo => memo.id);
+
+        return {
+            changes: {
+                updated: updated,
+                deleted: deleteIds
+            },
+            latestPulledAt: serverTime,
+        };
+    }
 }
