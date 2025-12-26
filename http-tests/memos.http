@@ -228,3 +228,45 @@ Authorization: Bearer {{token_A}}
         client.assert(deleted.includes(client.global.get('sync_memo_2_id')), "deleted 목록에 삭제된 메모 2의 ID가 없습니다.");
     });
 %}
+
+
+###
+# ==============================================================================
+# TEST SCENARIO: 동기화 PUSH API 테스트
+# ==============================================================================
+
+### Push Memos (Create, Update, Ignore)
+# @name pushMemos
+POST http://localhost:3000/memos/push
+Content-Type: application/json
+Authorization: Bearer {{token_A}}
+
+# 테스트 시나리오 설명
+# Case 1 (CREATE): 서버에 존재하지 않는 새 메모. "id"에 새 UUID를 넣어야 합니다.
+# Case 2 (UPDATE): 서버에 존재하는 메모를 최신 버전으로 업데이트. "id"에 기존 메모 ID를 넣고, updatedAt을 서버 시간보다 미래로 설정합니다.
+# Case 3 (IGNORE): 서버 버전이 더 최신이라 무시될 변경. "id"에 기존 메모 ID를 넣고, updatedAt을 서버 시간보다 과거로 설정합니다.
+{
+  "pushedMemos": [
+    {
+      "id": "86a03bfb-3434-4808-9e1b-5c54cdea3ff4",
+      "content": "Push API로 새로 생성된 메모입니다.",
+      "createdAt": "2025-12-26T10:00:00.000Z",
+      "updatedAt": "2025-12-26T10:00:00.000Z",
+      "deletedAt": null
+    },
+    {
+      "id": "b7b9096e-13b6-4a56-8f1d-07a5de00aefa",
+      "content": "이 내용은 Push API에 의해 수정되어야 합니다.",
+      "createdAt": "2025-12-25T09:00:00.000Z",
+      "updatedAt": "2026-01-01T12:00:00.000Z",
+      "deletedAt": null
+    },
+    {
+      "id": "cfd36d45-5de5-4c35-bf40-2db3326656c0",
+      "content": "이 내용은 서버에 반영되면 안 됩니다. (무시되어야 함)",
+      "createdAt": "2025-12-25T09:00:00.000Z",
+      "updatedAt": "2024-01-01T12:00:00.000Z",
+      "deletedAt": null
+    }
+  ]
+}

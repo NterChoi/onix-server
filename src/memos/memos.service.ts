@@ -1,16 +1,18 @@
 import {ForbiddenException, Injectable, NotFoundException} from '@nestjs/common';
 import {InjectRepository} from "@nestjs/typeorm";
 import {Memo} from "./entities/memo.entity";
-import {MoreThan, MoreThanOrEqual, Repository} from "typeorm";
+import {DataSource, MoreThan, MoreThanOrEqual, Repository} from "typeorm";
 import {CreateMemoDto} from "./dto/create-memo.dto";
 import {UpdateMemoDto} from "./dto/update-memo.dto";
+import {PushMemoDto} from "./dto/push-memo.dto";
 
 
 @Injectable()
 export class MemosService {
     constructor(
         @InjectRepository(Memo)
-        private readonly memoRepository: Repository<Memo>
+        private readonly memoRepository: Repository<Memo>,
+        private readonly dataSource: DataSource,
     ) {}
 
     async create(createMemoDTO: CreateMemoDto, userId: string): Promise<Memo> {
@@ -98,5 +100,48 @@ export class MemosService {
             },
             latestPulledAt: serverTime,
         };
+    }
+
+    async pushMemos(
+        userId: string,
+        { pushedMemos } : PushMemoDto,
+                    ) : Promise<{ results: Array<{ id: string; status: string }>}> {
+        const results: Array<{ id: string, status: string; }> = [];
+
+        await this.dataSource.transaction(async (transactionalEntityManager) => {
+            for (const clientMemo of pushedMemos) {
+                // 동시성 제어를 위해 비관적 잠금을 사용해 서버 메모 조회
+                const serverMemo = await transactionalEntityManager.findOne(Memo, {
+                    where: {id: clientMemo.id, user: {id: userId}},
+                    lock: {mode: 'pessimistic_write'},
+                });
+
+                // Case 1: 서버에 이미 메모가 존재할 경우 (Update or Ignore)
+                if (serverMemo) {
+                    // 클라이언트 버전이 더 최신이면 업데이트
+                    if (clientMemo.updatedAt > serverMemo.updatedAt) {
+                        await transactionalEntityManager.update(Memo, serverMemo.id, {
+                            content: clientMemo.content,
+                            updatedAt: clientMemo.updatedAt,
+                            deletedAt: clientMemo.deletedAt,
+                        });
+                        results.push({id: clientMemo.id, status: 'UPDATED'});
+                    } else {
+                        // 서버 버전이 더 최신이거나 같으면 무시
+                        results.push({id: clientMemo.id, status: 'IGNORED'});
+                    }
+                } // Case 2: 서버에 메모가 없을 경우 (CREATE)
+                else {
+                    const newMemo = transactionalEntityManager.create(Memo, {
+                        ...clientMemo,
+                        user: {id: userId},
+                    });
+                    await transactionalEntityManager.save(Memo, newMemo);
+                    results.push({id: clientMemo.id, status: 'CREATED'});
+                }
+            }
+        });
+
+        return {results};
     }
 }
