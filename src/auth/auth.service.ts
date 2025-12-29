@@ -1,14 +1,16 @@
-import {Injectable, UnauthorizedException} from '@nestjs/common';
+import {Inject, Injectable, UnauthorizedException} from '@nestjs/common';
 import {UsersService} from "../users/users.service";
 import {JwtService} from "@nestjs/jwt";
-import * as bcrypt from 'bcrypt';
+import {PasswordHasher} from "./hashing/password-hasher";
 
 
 @Injectable()
 export class AuthService {
     constructor(
         private readonly usersService: UsersService,
-        private readonly jwtService: JwtService
+        private readonly jwtService: JwtService,
+        @Inject(PasswordHasher)
+        private readonly passwordHasher: PasswordHasher
     ) {
     }
 
@@ -19,7 +21,7 @@ export class AuthService {
             throw new UnauthorizedException('이메일 또는 비밀번호를 확인해주세요.');
         }
 
-        const isMatch = await bcrypt.compare(pass, user.password);
+        const isMatch = await this.passwordHasher.compare(pass, user.password);
 
         if (!isMatch) {
             throw new UnauthorizedException('이메일 또는 비밀번호를 확인해주세요.');

@@ -1,15 +1,18 @@
-import {ConflictException, Injectable} from '@nestjs/common';
+import {ConflictException, Inject, Injectable} from '@nestjs/common';
 import {InjectRepository} from "@nestjs/typeorm";
 import {User} from "./entities/user.entity";
 import {Repository} from "typeorm";
 import {CreateUserDto} from "./dto/create-user.dto";
-import * as bcrypt from 'bcrypt';
+import {PasswordHasher} from "../auth/hashing/password-hasher";
 
 @Injectable()
 export class UsersService {
     constructor(
         @InjectRepository(User)
-        private readonly userRepository: Repository<User>
+        private readonly userRepository: Repository<User>,
+        @Inject(PasswordHasher)
+        private readonly passwordHasher: PasswordHasher,
+
     ) {}
 
     async create(createUserDTO: CreateUserDto): Promise<User> {
@@ -21,9 +24,7 @@ export class UsersService {
 
         const {password} = createUserDTO;
 
-        const saltRounds = 10;
-
-        const hashedPassword = await bcrypt.hash(password, saltRounds);
+        const hashedPassword = await this.passwordHasher.hash(password);
         const user = this.userRepository.create({
             email: createUserDTO.email,
             password: hashedPassword,
