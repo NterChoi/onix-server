@@ -2,12 +2,10 @@ import {Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards} from 
 import {MemosService} from "./memos.service";
 import {CreateMemoDto} from "./dto/create-memo.dto";
 import {UpdateMemoDto} from "./dto/update-memo.dto";
-import {AuthGuard} from "../auth/auth.guard";
 import {PullMemoDto} from "./dto/pull-memo.dto";
 import {PushMemoDto} from "./dto/push-memo.dto";
 
 @Controller('memos')
-@UseGuards(AuthGuard)
 export class MemosController {
     constructor(private readonly memosService: MemosService) {
     }
