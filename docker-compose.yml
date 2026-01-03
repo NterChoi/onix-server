@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   onix-db:
     image: mysql:8.0
@@ -7,7 +5,6 @@ services:
     restart: always
     ports:
       - "3306:3306"
-
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: onix_db
@@ -16,3 +13,16 @@ services:
     volumes:
       - ./mysql-data:/var/lib/mysql
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+
+  onix-api:
+    build: .
+    container_name: onix-api
+    restart: always
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      DB_HOST: onix-db
+    depends_on:
+      - onix-db
