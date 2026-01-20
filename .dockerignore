@@ -5,3 +5,6 @@ DockerFile
 .dockerignore
 .gitignore
 .git
+client
+http-tests
+mysql-data

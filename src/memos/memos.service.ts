@@ -121,7 +121,9 @@ export class MemosService {
                     // 클라이언트 버전이 더 최신이면 업데이트
                     if (clientMemo.updatedAt > serverMemo.updatedAt) {
                         await transactionalEntityManager.update(Memo, serverMemo.id, {
+                            title: clientMemo.title,
                             content: clientMemo.content,
+                            version: clientMemo.version,
                             updatedAt: clientMemo.updatedAt,
                             deletedAt: clientMemo.deletedAt,
                         });

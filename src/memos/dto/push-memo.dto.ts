@@ -1,4 +1,4 @@
-import {IsArray, IsDate, IsNotEmpty, IsOptional, IsString, IsUUID, ValidateNested} from "class-validator";
+import {IsArray, IsDate, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, ValidateNested} from "class-validator";
 import {Type} from "class-transformer";
 
 class PushedMemo {
@@ -7,7 +7,15 @@ class PushedMemo {
     id: string;
 
     @IsString()
+    @IsOptional()
+    title: string;
+
+    @IsString()
     content: string;
+
+    @IsInt()
+    @IsNotEmpty()
+    version: number;
 
     @IsDate()
     @Type(() => Date)
