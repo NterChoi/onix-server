@@ -2,6 +2,7 @@ import React, {useEffect, useState} from "react";
 import {database} from "../watermelondb/database";
 import Memo from "../watermelondb/model/Memo";
 import {Button, StyleSheet, TextInput, View} from "react-native";
+import Toast from 'react-native-toast-message';
 import * as Crypto from 'expo-crypto';
 
 interface MemoInputProps {
@@ -25,24 +26,44 @@ const MemoInput = ({ memoToEdit, onCancelEdit, onUpdateMemo }: MemoInputProps) =
     }, [memoToEdit]);
 
     const handleSave = async () => {
-        if (!title.trim()) return;
-
-        if (memoToEdit && onUpdateMemo) {
-            // 수정 모드
-            onUpdateMemo(memoToEdit.id, title, content);
-        } else {
-            // 생성 모드
-            await database.write(async () => {
-                await database.get<Memo>('memos').create((memo) => {
-                    memo._raw.id = Crypto.randomUUID();
-                    memo.title = title;
-                    memo.content = content;
-                    memo.version = 1;
-                    memo.userId = 'temp-user-id';
-                });
+        if (!title.trim()) {
+            Toast.show({
+                type: 'info',
+                text1: '입력 확인',
+                text2: '제목을 입력해주세요.'
             });
-            setTitle('');
-            setContent('');
+            return;
+        }
+
+        try {
+            if (memoToEdit && onUpdateMemo) {
+                // 수정 모드
+                onUpdateMemo(memoToEdit.id, title, content);
+            } else {
+                // 생성 모드
+                await database.write(async () => {
+                    await database.get<Memo>('memos').create((memo) => {
+                        memo._raw.id = Crypto.randomUUID();
+                        memo.title = title;
+                        memo.content = content;
+                        memo.version = 1;
+                        memo.userId = 'temp-user-id';
+                    });
+                });
+                setTitle('');
+                setContent('');
+                Toast.show({
+                    type: 'success',
+                    text1: '저장 완료',
+                    text2: '새로운 메모가 추가되었습니다. 📝'
+                });
+            }
+        } catch (error: any) {
+            Toast.show({
+                type: 'error',
+                text1: '저장 실패',
+                text2: error.message
+            });
         }
     };
 

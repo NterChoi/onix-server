@@ -1,6 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
-import {Alert, SafeAreaView, StyleSheet, Text, View, TouchableOpacity, ActivityIndicator} from 'react-native';
+import {SafeAreaView, StyleSheet, Text, View, TouchableOpacity, ActivityIndicator} from 'react-native';
 import {useEffect, useState} from "react";
+import Toast from 'react-native-toast-message';
 import {database} from "./src/watermelondb/database";
 import Memo from "./src/watermelondb/model/Memo";
 import MemoInput from "./src/components/MemoInput";
@@ -33,22 +34,48 @@ export default function App() {
 
     // 메모 삭제 핸들러 (Soft Delete)
     const handleDeleteMemo = async (memo: Memo) => {
-      await database.write(async () => {
-        await memo.markAsDeleted(); // 실제로 삭제하지 않고 deleted_at 플래그만 설정
-      });
+      try {
+          await database.write(async () => {
+            await memo.markAsDeleted(); // 실제로 삭제하지 않고 deleted_at 플래그만 설정
+          });
+          Toast.show({
+              type: 'success',
+              text1: '삭제 완료',
+              text2: '메모가 휴지통으로 이동되었습니다.'
+          });
+      } catch (error: any) {
+          Toast.show({
+              type: 'error',
+              text1: '삭제 실패',
+              text2: error.message
+          });
+      }
     };
 
     // 메모 수정 핸들러
     const handleUpdateMemo = async (id: string, title: string, content: string) => {
-        await database.write(async () => {
-            const memo = await database.get<Memo>('memos').find(id);
-            await memo.update(m => {
-                m.title = title;
-                m.content = content;
-                m.version += 1; // 버전 증가
+        try {
+            await database.write(async () => {
+                const memo = await database.get<Memo>('memos').find(id);
+                await memo.update(m => {
+                    m.title = title;
+                    m.content = content;
+                    m.version += 1; // 버전 증가
+                });
             });
-        });
-        setEditingMemo(null); // 수정 모드 종료
+            setEditingMemo(null); // 수정 모드 종료
+            Toast.show({
+                type: 'success',
+                text1: '수정 완료',
+                text2: '변경사항이 저장되었습니다.'
+            });
+        } catch (error: any) {
+            Toast.show({
+                type: 'error',
+                text1: '수정 실패',
+                text2: error.message
+            });
+        }
     };
 
     const handleSync = async () => {
@@ -57,9 +84,17 @@ export default function App() {
         setIsSyncing(true);
         try {
             await syncData(token);
-            Alert.alert('성공', '동기화가 완료되었습니다!');
+            Toast.show({
+                type: 'success',
+                text1: '동기화 성공',
+                text2: '최신 데이터를 가져왔습니다. ✨'
+            });
         } catch (error: any) {
-            Alert.alert('동기화 실패', error.message);
+            Toast.show({
+                type: 'error',
+                text1: '동기화 실패',
+                text2: error.message || '서버와 연결할 수 없습니다.'
+            });
         } finally {
             setIsSyncing(false);
         }
@@ -91,6 +126,7 @@ export default function App() {
           <>
             <AuthScreen onAuthenticated={handleAuthenticated} />
             <StatusBar style="auto"/>
+            <Toast />
           </>
       );
   }
@@ -128,7 +164,7 @@ export default function App() {
         </View>
 
         <StatusBar style="auto"/>
-
+        <Toast />
       </SafeAreaView>
   );
 }

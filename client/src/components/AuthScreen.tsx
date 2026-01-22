@@ -5,9 +5,9 @@ import {
     TextInput,
     TouchableOpacity,
     StyleSheet,
-    Alert,
     ActivityIndicator
 } from 'react-native';
+import Toast from 'react-native-toast-message';
 
 // API Base URL (iOS Simulator: localhost, Android: 10.0.2.2)
 const API_BASE_URL = 'http://localhost:3000'; 
@@ -24,14 +24,22 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
 
     const handleAuth = async () => {
         if (!email || !password) {
-            Alert.alert('알림', '이메일과 비밀번호를 모두 입력해주세요.');
+            Toast.show({
+                type: 'info',
+                text1: '입력 확인',
+                text2: '이메일과 비밀번호를 모두 입력해주세요.'
+            });
             return;
         }
 
         // 간단한 이메일 형식 검사 (Client-side Validation)
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
-            Alert.alert('오류', '유효한 이메일 주소를 입력해주세요.');
+            Toast.show({
+                type: 'error',
+                text1: '형식 오류',
+                text2: '유효한 이메일 주소를 입력해주세요.'
+            });
             return;
         }
 
@@ -51,6 +59,11 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                     throw new Error(data.message || '로그인에 실패했습니다.');
                 }
 
+                Toast.show({
+                    type: 'success',
+                    text1: '반갑습니다!',
+                    text2: '성공적으로 로그인되었습니다.'
+                });
                 onAuthenticated(data.access_token);
             } else {
                 // 회원가입 요청
@@ -64,16 +77,24 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
 
                 if (!response.ok) {
                     const errorMessage = Array.isArray(data.message) 
-                        ? data.message.join('\n') 
+                        ? data.message.join(', ') 
                         : data.message || '회원가입에 실패했습니다.';
                     throw new Error(errorMessage);
                 }
 
-                Alert.alert('성공', '계정이 생성되었습니다. 로그인을 진행해주세요.');
+                Toast.show({
+                    type: 'success',
+                    text1: '가입 성공',
+                    text2: '계정이 생성되었습니다. 로그인을 진행해주세요. 🎉'
+                });
                 setIsLoginMode(true);
             }
         } catch (error: any) {
-            Alert.alert('인증 오류', error.message);
+            Toast.show({
+                type: 'error',
+                text1: '인증 실패',
+                text2: error.message
+            });
         } finally {
             setIsLoading(false);
         }
