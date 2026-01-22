@@ -1,16 +1,35 @@
 import { StatusBar } from 'expo-status-bar';
-import {Alert, Button, SafeAreaView, StyleSheet, Text, TextInput, View} from 'react-native';
+import {Alert, SafeAreaView, StyleSheet, Text, View, TouchableOpacity, ActivityIndicator} from 'react-native';
 import {useEffect, useState} from "react";
 import {database} from "./src/watermelondb/database";
 import Memo from "./src/watermelondb/model/Memo";
 import MemoInput from "./src/components/MemoInput";
 import MemoList from "./src/components/MemoList";
+import AuthScreen from "./src/components/AuthScreen";
 import {syncData} from "./src/watermelondb/sync";
+import {getToken, removeToken, saveToken} from "./src/utils/auth";
 
 export default function App() {
-  const [token, setToken] = useState('');
+  const [token, setToken] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [editingMemo, setEditingMemo] = useState<Memo | null>(null);
+  const [isLoadingToken, setIsLoadingToken] = useState(true);
+
+  useEffect(() => {
+      const loadToken = async () => {
+          try {
+              const storedToken = await getToken();
+              if (storedToken) {
+                  setToken(storedToken);
+              }
+          } catch (e) {
+              console.error("Failed to load token", e);
+          } finally {
+              setIsLoadingToken(false);
+          }
+      };
+      loadToken();
+  }, []);
 
     // 메모 삭제 핸들러 (Soft Delete)
     const handleDeleteMemo = async (memo: Memo) => {
@@ -33,43 +52,66 @@ export default function App() {
     };
 
     const handleSync = async () => {
-        if (!token) {
-            Alert.alert('Error', 'Please enter a JWT token');
-            return;
-        }
+        if (!token) return;
 
         setIsSyncing(true);
         try {
             await syncData(token);
-            Alert.alert('Success', 'Sync completed!');
+            Alert.alert('성공', '동기화가 완료되었습니다!');
         } catch (error: any) {
-            Alert.alert('Sync Failed', error.message);
+            Alert.alert('동기화 실패', error.message);
         } finally {
             setIsSyncing(false);
         }
     };
 
+    const handleAuthenticated = async (newToken: string) => {
+        await saveToken(newToken);
+        setToken(newToken);
+    };
+
+    const handleLogout = async () => {
+        await removeToken();
+        setToken(null);
+        // Local-first 특성상 로컬 데이터는 유지하지만, 
+        // 다중 사용자 환경을 고려한다면 여기서 DB 초기화 로직을 고민해볼 수 있습니다.
+    };
+
+    if (isLoadingToken) {
+        return (
+            <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+                <ActivityIndicator size="large" />
+            </View>
+        );
+    }
+
+
+  if (!token) {
+      return (
+          <>
+            <AuthScreen onAuthenticated={handleAuthenticated} />
+            <StatusBar style="auto"/>
+          </>
+      );
+  }
 
   return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Onix Memo</Text>
+            <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
+                <Text style={styles.logoutText}>로그아웃</Text>
+            </TouchableOpacity>
         </View>
 
         <View style={styles.syncContainer}>
-            <TextInput
-                style={styles.tokenInput}
-                placeholder="Paste JWT Token here"
-                value={token}
-                onChangeText={setToken}
-                autoCapitalize="none"
-                autoCorrect={false}
-            />
-            <Button
-                title={isSyncing ? "Syncing..." : "Sync Now"}
+             <TouchableOpacity 
+                style={[styles.syncButton, isSyncing && styles.syncButtonDisabled]} 
                 onPress={handleSync}
                 disabled={isSyncing}
-            />
+            >
+                <Text style={styles.syncButtonText}>{isSyncing ? "동기화 중..." : "동기화 실행"}</Text>
+            </TouchableOpacity>
         </View>
 
         <MemoInput
@@ -100,27 +142,38 @@ const styles = StyleSheet.create({
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center'
   },
   headerTitle: {
     fontSize: 29,
     fontWeight: 'bold'
   },
+  logoutButton: {
+      padding: 8,
+  },
+  logoutText: {
+      color: 'red',
+      fontSize: 16,
+  },
   syncContainer: {
-    flexDirection: 'row',
     padding: 10,
     backgroundColor: '#f9f9f9',
     alignItems: 'center',
-    gap: 10
   },
-  tokenInput: {
-    flex: 1,
-    height: 40,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 5,
-    paddingHorizontal: 10,
-    fontSize: 12
+  syncButton: {
+      backgroundColor: '#34C759',
+      paddingVertical: 8,
+      paddingHorizontal: 20,
+      borderRadius: 20,
+  },
+  syncButtonDisabled: {
+      backgroundColor: '#98dbaa',
+  },
+  syncButtonText: {
+      color: '#fff',
+      fontWeight: '600'
   },
   listContainer: {
     flex: 1,
