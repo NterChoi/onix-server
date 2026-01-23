@@ -2,6 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import {SafeAreaView, StyleSheet, Text, View, TouchableOpacity, ActivityIndicator} from 'react-native';
 import {useEffect, useState} from "react";
 import Toast from 'react-native-toast-message';
+import { useNetInfo } from '@react-native-community/netinfo';
 import {database} from "./src/watermelondb/database";
 import Memo from "./src/watermelondb/model/Memo";
 import MemoInput from "./src/components/MemoInput";
@@ -15,6 +16,9 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [editingMemo, setEditingMemo] = useState<Memo | null>(null);
   const [isLoadingToken, setIsLoadingToken] = useState(true);
+  
+  const netInfo = useNetInfo();
+  const isOffline = netInfo.isConnected === false;
 
   useEffect(() => {
       const loadToken = async () => {
@@ -79,7 +83,7 @@ export default function App() {
     };
 
     const handleSync = async () => {
-        if (!token) return;
+        if (!token || isOffline) return;
 
         setIsSyncing(true);
         try {
@@ -140,13 +144,24 @@ export default function App() {
             </TouchableOpacity>
         </View>
 
+        {isOffline && (
+            <View style={styles.offlineBanner}>
+                <Text style={styles.offlineText}>현재 오프라인 상태입니다. 메모는 로컬에 저장됩니다.</Text>
+            </View>
+        )}
+
         <View style={styles.syncContainer}>
              <TouchableOpacity 
-                style={[styles.syncButton, isSyncing && styles.syncButtonDisabled]} 
+                style={[
+                    styles.syncButton, 
+                    (isSyncing || isOffline) && styles.syncButtonDisabled
+                ]} 
                 onPress={handleSync}
-                disabled={isSyncing}
+                disabled={isSyncing || isOffline}
             >
-                <Text style={styles.syncButtonText}>{isSyncing ? "동기화 중..." : "동기화 실행"}</Text>
+                <Text style={styles.syncButtonText}>
+                    {isOffline ? "오프라인 (동기화 불가)" : isSyncing ? "동기화 중..." : "동기화 실행"}
+                </Text>
             </TouchableOpacity>
         </View>
 
@@ -193,6 +208,16 @@ const styles = StyleSheet.create({
       color: 'red',
       fontSize: 16,
   },
+  offlineBanner: {
+      backgroundColor: '#FF9500',
+      padding: 8,
+      alignItems: 'center',
+  },
+  offlineText: {
+      color: '#fff',
+      fontSize: 13,
+      fontWeight: '600',
+  },
   syncContainer: {
     padding: 10,
     backgroundColor: '#f9f9f9',
@@ -215,3 +240,4 @@ const styles = StyleSheet.create({
     flex: 1,
   }
 });
+
