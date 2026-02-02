@@ -9,6 +9,7 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "@nozbe/simdjson": "^3.9.4",
     "@nozbe/watermelondb": "^0.28.0",
     "@nozbe/with-observables": "^1.6.0",
     "@react-native-community/netinfo": "^11.4.1",
@@ -25,6 +26,15 @@
     "@types/react": "~19.1.0",
     "@types/react-native": "^0.72.8",
     "typescript": "~5.9.2"
+  },
+  "react-native": {
+    "dependencies": {
+      "@nozbe/simdjson": {
+        "platforms": {
+          "ios": null
+        }
+      }
+    }
   },
   "private": true
 }

@@ -32,7 +32,7 @@
       [
         "@morrowdigital/watermelondb-expo-plugin",
         {
-          "disableJsi": true
+          "disableJsi": false
         }
       ]
     ]
