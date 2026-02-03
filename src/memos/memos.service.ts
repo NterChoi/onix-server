@@ -120,14 +120,25 @@ export class MemosService {
                 if (serverMemo) {
                     // 클라이언트 버전이 더 최신이면 업데이트
                     if (clientMemo.updatedAt > serverMemo.updatedAt) {
-                        await transactionalEntityManager.update(Memo, serverMemo.id, {
-                            title: clientMemo.title,
-                            content: clientMemo.content,
-                            version: clientMemo.version,
-                            updatedAt: clientMemo.updatedAt,
-                            deletedAt: clientMemo.deletedAt,
-                        });
-                        results.push({id: clientMemo.id, status: 'UPDATED'});
+                        // 삭제 요청인 경우 (deletedAt이 존재하면) 내용(title, content)은 보존하고 삭제 마킹만 수행
+                        if (clientMemo.deletedAt) {
+                            await transactionalEntityManager.update(Memo, serverMemo.id, {
+                                updatedAt: clientMemo.updatedAt,
+                                deletedAt: clientMemo.deletedAt,
+                                // version은 서버 데이터를 유지하거나, 필요시 증가시킬 수 있음. 여기서는 보존.
+                            });
+                             results.push({id: clientMemo.id, status: 'DELETED'});
+                        } else {
+                            // 일반 수정인 경우 전체 필드 업데이트
+                            await transactionalEntityManager.update(Memo, serverMemo.id, {
+                                title: clientMemo.title,
+                                content: clientMemo.content,
+                                version: clientMemo.version,
+                                updatedAt: clientMemo.updatedAt,
+                                deletedAt: clientMemo.deletedAt,
+                            });
+                            results.push({id: clientMemo.id, status: 'UPDATED'});
+                        }
                     } else {
                         // 서버 버전이 더 최신이거나 같으면 무시
                         results.push({id: clientMemo.id, status: 'IGNORED'});

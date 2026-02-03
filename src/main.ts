@@ -1,10 +1,24 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import {ValidationPipe} from "@nestjs/common";
-import {HttpExceptionFilter} from "./common/filters/http-exception.filter";
+import { ValidationPipe, Logger } from "@nestjs/common";
+import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Simple Request Logger
+  const logger = new Logger('HTTP');
+  app.use((req, res, next) => {
+    const { method, originalUrl } = req;
+    const start = Date.now();
+    res.on('finish', () => {
+      const { statusCode } = res;
+      const delay = Date.now() - start;
+      logger.log(`${method} ${originalUrl} ${statusCode} - ${delay}ms`);
+    });
+    next();
+  });
+
   app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
