@@ -1,7 +1,7 @@
 import {ForbiddenException, Injectable, NotFoundException} from '@nestjs/common';
 import {InjectRepository} from "@nestjs/typeorm";
 import {Memo} from "./entities/memo.entity";
-import {DataSource, MoreThan, MoreThanOrEqual, Repository} from "typeorm";
+import {DataSource, MoreThan, In,Repository} from "typeorm";
 import {CreateMemoDto} from "./dto/create-memo.dto";
 import {UpdateMemoDto} from "./dto/update-memo.dto";
 import {PushMemoDto} from "./dto/push-memo.dto";
@@ -108,35 +108,49 @@ export class MemosService {
                     ) : Promise<{ results: Array<{ id: string; status: string }>}> {
         const results: Array<{ id: string, status: string; }> = [];
 
-        await this.dataSource.transaction(async (transactionalEntityManager) => {
-            for (const clientMemo of pushedMemos) {
-                // 동시성 제어를 위해 비관적 잠금을 사용해 서버 메모 조회
-                const serverMemo = await transactionalEntityManager.findOne(Memo, {
-                    where: {id: clientMemo.id, user: {id: userId}},
-                    lock: {mode: 'pessimistic_write'},
-                });
+        if (pushedMemos.length === 0) {
+            return {results: []};
+        }
 
-                // Case 1: 서버에 이미 메모가 존재할 경우 (Update or Ignore)
+        // 성능 최적화 : 대량 데이터 처리 시 페이로드 크기 제한
+        if (pushedMemos.length > 500) {
+            throw new Error('Too many memos in a single push. please sync in smaller batches.');
+        }
+
+        const pushedIds = pushedMemos.map(m => m.id);
+
+        await this.dataSource.transaction(async (transactionalEntityManager) => {
+            // 1. 기존 메모들을 한 번에 조회 (N+1 문제 해결)
+            const existingMemos = await transactionalEntityManager.find(Memo, {
+                where: {
+                    id: In(pushedIds),
+                    userId: userId,
+                },
+                withDeleted: true,
+            });
+
+            const existingMemosMap = new Map(existingMemos.map(m => [m.id, m]));
+            const toSave: Memo[] = [];
+
+            for (const clientMemo of pushedMemos) {
+                const serverMemo = existingMemosMap.get(clientMemo.id);
+
+
                 if (serverMemo) {
                     // 클라이언트 버전이 더 최신이면 업데이트
-                    if (clientMemo.updatedAt > serverMemo.updatedAt) {
+                    if (new Date(clientMemo.updatedAt) > new Date(serverMemo.updatedAt)) {
                         // 삭제 요청인 경우 (deletedAt이 존재하면) 내용(title, content)은 보존하고 삭제 마킹만 수행
                         if (clientMemo.deletedAt) {
-                            await transactionalEntityManager.update(Memo, serverMemo.id, {
-                                updatedAt: clientMemo.updatedAt,
-                                deletedAt: clientMemo.deletedAt,
-                                // version은 서버 데이터를 유지하거나, 필요시 증가시킬 수 있음. 여기서는 보존.
-                            });
+                            serverMemo.updatedAt = clientMemo.updatedAt;
+                            serverMemo.deletedAt = clientMemo.deletedAt;
                              results.push({id: clientMemo.id, status: 'DELETED'});
                         } else {
                             // 일반 수정인 경우 전체 필드 업데이트
-                            await transactionalEntityManager.update(Memo, serverMemo.id, {
-                                title: clientMemo.title,
-                                content: clientMemo.content,
-                                version: clientMemo.version,
-                                updatedAt: clientMemo.updatedAt,
-                                deletedAt: clientMemo.deletedAt,
-                            });
+                            serverMemo.title = clientMemo.title;
+                            serverMemo.content = clientMemo.content;
+                            serverMemo.version = clientMemo.version;
+                            serverMemo.updatedAt = clientMemo.updatedAt;
+                            serverMemo.deletedAt = null;
                             results.push({id: clientMemo.id, status: 'UPDATED'});
                         }
                     } else {
@@ -149,12 +163,17 @@ export class MemosService {
                         ...clientMemo,
                         user: {id: userId},
                     });
-                    await transactionalEntityManager.save(Memo, newMemo);
+                    toSave.push(newMemo);
                     results.push({id: clientMemo.id, status: 'CREATED'});
                 }
             }
+            // 2. 변경사항 일괄 저장
+            if (toSave.length > 0) {
+                await transactionalEntityManager.save(Memo, toSave);
+            }
         });
 
-        return {results};
+        console.log(`[Sync] Pushed ${pushedMemos.length} memos for user ${userId}. (saved: ${results.filter(r => r.status !== 'IGNORED').length}`);
+        return {results}
     }
 }
