@@ -6,6 +6,9 @@ import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // Enable CORS
+  app.enableCors();
+
   // Simple Request Logger
   const logger = new Logger('HTTP');
   app.use((req, res, next) => {

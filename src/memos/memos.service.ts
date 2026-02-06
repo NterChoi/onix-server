@@ -135,17 +135,20 @@ export class MemosService {
             for (const clientMemo of pushedMemos) {
                 const serverMemo = existingMemosMap.get(clientMemo.id);
 
-
                 if (serverMemo) {
-                    // 클라이언트 버전이 더 최신이면 업데이트
-                    if (new Date(clientMemo.updatedAt) > new Date(serverMemo.updatedAt)) {
-                        // 삭제 요청인 경우 (deletedAt이 존재하면) 내용(title, content)은 보존하고 삭제 마킹만 수행
+                    // 버전 기반 충돌 감지
+                    const isClientVersionNewer = clientMemo.version > serverMemo.version;
+                    const isDeletionRequest = !!clientMemo.deletedAt;
+                    
+                    // 삭제 요청이거나 클라이언트 버전이 더 높을 때만 업데이트 수용
+                    if (isDeletionRequest || isClientVersionNewer) {
                         if (clientMemo.deletedAt) {
+                            // 삭제 시 버전은 유지하거나 필요시 1 증가
+                            serverMemo.version = clientMemo.version > 0 ? clientMemo.version : serverMemo.version + 1;
                             serverMemo.updatedAt = clientMemo.updatedAt;
                             serverMemo.deletedAt = clientMemo.deletedAt;
-                             results.push({id: clientMemo.id, status: 'DELETED'});
+                            results.push({id: clientMemo.id, status: 'DELETED'});
                         } else {
-                            // 일반 수정인 경우 전체 필드 업데이트
                             serverMemo.title = clientMemo.title;
                             serverMemo.content = clientMemo.content;
                             serverMemo.version = clientMemo.version;
@@ -153,12 +156,14 @@ export class MemosService {
                             serverMemo.deletedAt = null;
                             results.push({id: clientMemo.id, status: 'UPDATED'});
                         }
+                        toSave.push(serverMemo);
                     } else {
-                        // 서버 버전이 더 최신이거나 같으면 무시
-                        results.push({id: clientMemo.id, status: 'IGNORED'});
+                        // 업데이트 요청인데 버전이 낮거나 같으면 충돌!
+                        console.warn(`[Sync Conflict] Memo ${clientMemo.id} rejected. Client version: ${clientMemo.version}, Server version: ${serverMemo.version}`);
+                        results.push({id: clientMemo.id, status: 'CONFLICT'});
                     }
-                } // Case 2: 서버에 메모가 없을 경우 (CREATE)
-                else {
+                } else {
+                    // 서버에 메모가 없을 경우 (CREATE)
                     const newMemo = transactionalEntityManager.create(Memo, {
                         ...clientMemo,
                         user: {id: userId},
@@ -167,6 +172,7 @@ export class MemosService {
                     results.push({id: clientMemo.id, status: 'CREATED'});
                 }
             }
+
             // 2. 변경사항 일괄 저장
             if (toSave.length > 0) {
                 await transactionalEntityManager.save(Memo, toSave);

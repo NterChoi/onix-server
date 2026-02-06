@@ -62,7 +62,10 @@ export async function syncData(token: string) {
                 };
             },
             pushChanges: async ({ changes }) => {
-                const { created, updated, deleted } = changes.memos;
+                const memosChanges = (changes as any)['memos'];
+                if (!memosChanges) return;
+
+                const { created, updated, deleted } = memosChanges;
 
                 // Flatten changes for Onix's Push API
                 const pushedMemos = [
