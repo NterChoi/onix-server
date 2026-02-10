@@ -7,6 +7,7 @@ export default class Memo extends Model {
     @field('title') title!: string;
     @field('content') content?: string;
     @field('version') version!: number;
+    @field('last_synced_version') lastSyncedVersion!: number;
     @field('user_id') userId!: string;
 
     @readonly @date('created_at') createdAt!: Date;

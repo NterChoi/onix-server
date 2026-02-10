@@ -120,6 +120,7 @@ function App() {
                     m.title = 'New Note';
                     m.content = '';
                     m.version = 1;
+                    m.lastSyncedVersion = 0; // 신규 메모는 서버 버전 0에서 시작
                     m.userId = 'local_user';
                 });
                 setSelectedMemo(newMemo);

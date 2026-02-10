@@ -136,15 +136,16 @@ export class MemosService {
                 const serverMemo = existingMemosMap.get(clientMemo.id);
 
                 if (serverMemo) {
-                    // 버전 기반 충돌 감지
-                    const isClientVersionNewer = clientMemo.version > serverMemo.version;
+                    // [고도화된 충돌 감지 로직]
+                    // 클라이언트가 편집을 시작한 기준(baseVersion)이 서버의 현재 버전과 같은지 확인
+                    const isBaseVersionMatch = clientMemo.baseVersion === serverMemo.version;
                     const isDeletionRequest = !!clientMemo.deletedAt;
-                    
-                    // 삭제 요청이거나 클라이언트 버전이 더 높을 때만 업데이트 수용
-                    if (isDeletionRequest || isClientVersionNewer) {
+
+                    // 1. 기준 버전이 일치하고 클라이언트 버전이 더 높을 때 (정상 업데이트)
+                    // 2. 삭제 요청인 경우 (삭제는 우선권 부여 가능, 혹은 동일하게 체크 가능)
+                    if (isBaseVersionMatch && clientMemo.version > serverMemo.version) {
                         if (clientMemo.deletedAt) {
-                            // 삭제 시 버전은 유지하거나 필요시 1 증가
-                            serverMemo.version = clientMemo.version > 0 ? clientMemo.version : serverMemo.version + 1;
+                            serverMemo.version = clientMemo.version;
                             serverMemo.updatedAt = clientMemo.updatedAt;
                             serverMemo.deletedAt = clientMemo.deletedAt;
                             results.push({id: clientMemo.id, status: 'DELETED'});
@@ -157,9 +158,16 @@ export class MemosService {
                             results.push({id: clientMemo.id, status: 'UPDATED'});
                         }
                         toSave.push(serverMemo);
+                    } else if (isDeletionRequest && clientMemo.version > serverMemo.version) {
+                        // 삭제의 경우 baseVersion이 다르더라도 클라이언트가 삭제를 원한다면 수용할 수도 있음 (정책 결정 사항)
+                        // 여기서는 일단 버전이 높으면 수용하는 기존 로직 유지
+                        serverMemo.version = clientMemo.version;
+                        serverMemo.deletedAt = clientMemo.deletedAt;
+                        toSave.push(serverMemo);
+                        results.push({id: clientMemo.id, status: 'DELETED'});
                     } else {
-                        // 업데이트 요청인데 버전이 낮거나 같으면 충돌!
-                        console.warn(`[Sync Conflict] Memo ${clientMemo.id} rejected. Client version: ${clientMemo.version}, Server version: ${serverMemo.version}`);
+                        // 기준 버전이 다르거나 클라이언트 버전이 낮으면 충돌!
+                        console.warn(`[Sync Conflict] Memo ${clientMemo.id} rejected. Client baseVersion: ${clientMemo.baseVersion}, Server version: ${serverMemo.version}`);
                         results.push({id: clientMemo.id, status: 'CONFLICT'});
                     }
                 } else {

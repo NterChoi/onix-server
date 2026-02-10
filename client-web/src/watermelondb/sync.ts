@@ -33,8 +33,11 @@ export async function syncOnix() {
       
       const changes = {
         memos: {
-          created: [], // 우리 서버는 updated에 신규/수정 모두 포함하므로 created는 빈 배열
-          updated: serverChanges.updated || [],
+          created: [],
+          updated: (serverChanges.updated || []).map((m: any) => ({
+            ...m,
+            last_synced_version: m.version // 서버에서 내려준 버전을 기준 버전으로 기록
+          })),
           deleted: serverChanges.deleted || []
         }
       };
@@ -53,6 +56,7 @@ export async function syncOnix() {
           title: m.title || '',
           content: m.content || '',
           version: m.version || 1,
+          baseVersion: m.last_synced_version || 0, // 생성 시에는 0 혹은 기본값
           createdAt: new Date(m.created_at),
           updatedAt: new Date(m.updated_at),
           deletedAt: null
@@ -62,6 +66,7 @@ export async function syncOnix() {
           title: m.title || '',
           content: m.content || '',
           version: m.version || 1,
+          baseVersion: m.last_synced_version || m.version - 1, // 수정 시 baseVersion 전달
           createdAt: new Date(m.created_at),
           updatedAt: new Date(m.updated_at),
           deletedAt: null
@@ -70,7 +75,8 @@ export async function syncOnix() {
           id,
           title: '',
           content: '',
-          version: 0, // 서버에서 fallback 처리하도록 0 전송
+          version: 0,
+          baseVersion: 0,
           createdAt: new Date(),
           updatedAt: new Date(),
           deletedAt: new Date()

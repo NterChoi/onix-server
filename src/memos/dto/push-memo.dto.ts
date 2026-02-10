@@ -17,6 +17,10 @@ class PushedMemo {
     @IsNotEmpty()
     version: number;
 
+    @IsInt()
+    @IsNotEmpty()
+    baseVersion: number;
+
     @IsDate()
     @Type(() => Date)
     @IsNotEmpty()
