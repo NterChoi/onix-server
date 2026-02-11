@@ -28,6 +28,12 @@ export class MemosController {
         return this.memosService.findOne(id, userId);
     }
 
+    @Get(':id/histories')
+    getHistories(@Param('id') id: string, @Req() req) {
+        const userId = req.user.sub;
+        return this.memosService.findHistories(id, userId);
+    }
+
     @Patch(':id')
     update(@Param('id') id: string,
            @Body() updateMemoDto: UpdateMemoDto,

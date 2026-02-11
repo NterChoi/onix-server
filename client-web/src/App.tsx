@@ -1,107 +1,56 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Editor } from "./components/Editor.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { AuthScreen } from "./components/AuthScreen.tsx";
-import { database } from './watermelondb/database';
-import Memo from './watermelondb/model/Memo';
-import { Q } from '@nozbe/watermelondb';
 import { syncOnix } from './watermelondb/sync';
 import { getToken, removeToken } from './utils/auth';
+import { useMemos } from './hooks/useMemos';
+import toast, { Toaster } from 'react-hot-toast';
 
 function App() {
-    const [memos, setMemos] = useState<Memo[]>([]);
-    const [selectedMemo, setSelectedMemo] = useState<Memo | null>(null);
-    const [loading, setLoading] = useState(true);
+    const { 
+        memos, 
+        selectedMemo, 
+        setSelectedMemo, 
+        loading, 
+        addMemo, 
+        deleteMemo, 
+        saveMemo, 
+        restoreMemo,
+        resolveConflictWithServer
+    } = useMemos();
+
     const [isAuthenticated, setIsAuthenticated] = useState(!!getToken());
     const [showAuthModal, setShowAuthModal] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
+    const [hasConflict, setHasConflict] = useState(false);
 
-    // 1. 초기 로드 및 실시간 구독
-    useEffect(() => {
-        const memosQuery = database.get<Memo>('memos').query(
-            Q.sortBy('updated_at', Q.desc)
-        );
-        
-        const subscription = memosQuery.observe().subscribe((newMemos) => {
-            setMemos(newMemos);
-            setLoading(false);
-        });
-
-        return () => subscription.unsubscribe();
-    }, []);
-
-    useEffect(() => {
-        if (!loading && memos.length > 0 && !selectedMemo) {
-            setSelectedMemo(memos[0]);
-        }
-    }, [loading, memos]);
-
-    // 2. 동기화 실행
+    // 1. 동기화 실행
     const handleSync = async () => {
         if (isSyncing) return;
         setIsSyncing(true);
+        setHasConflict(false);
         try {
             await syncOnix();
-            alert('동기화 성공!');
+            toast.success('동기화 완료!');
         } catch (err: any) {
             console.error('Sync Error:', err);
-            
             if (err.message === 'CONFLICT_DETECTED') {
-                const conflictIds = err.conflictIds || [];
-                alert(`${conflictIds.length}건의 메모에 충돌이 발생했습니다. 서버의 최신 데이터로 강제 업데이트합니다.`);
-                
-                try {
-                    // [강제 복구 로직 강화]
-                    await database.write(async () => {
-                        const updates: any[] = [];
-                        for (const id of conflictIds) {
-                            try {
-                                const memo = await database.get<Memo>('memos').find(id);
-                                updates.push(
-                                    memo.prepareUpdate(m => {
-                                        // @ts-ignore
-                                        m._raw._status = 'synced'; // 로컬 수정 마킹 제거
-                                        // @ts-ignore
-                                        m._raw._changed = ''; // 변경 필드 초기화
-                                    })
-                                );
-                            } catch (e) {
-                                // 삭제된 메모 처리
-                                const raws = await database.get('memos').query(Q.where('id', id)).unsafeFetchRaw();
-                                if (raws.length > 0) {
-                                    // @ts-ignore
-                                    await database.adapter.batch([
-                                        ['update', { ...raws[0], _status: 'synced', _changed: '', deleted_at: null }]
-                                    ]);
-                                }
-                            }
-                        }
-                        if (updates.length > 0) {
-                            await database.batch(...updates); // 준비된 업데이트를 한 번에 실행
-                        }
-                    });
-
-                    console.log('Recovery: Local status reset. Re-syncing...');
-                    // 다시 동기화 실행 (이제 로컬이 'synced' 상태이므로 서버 데이터를 정상적으로 받아옴)
-                    await syncOnix();
-                    alert('데이터 복구 완료!');
-                    window.location.reload(); 
-                } catch (retryErr) {
-                    console.error('Recovery Sync Error:', retryErr);
-                }
+                setHasConflict(true);
+                toast.error('동기화 중 충돌이 발생했습니다. 서버 아카이브를 확인하세요.', { duration: 5000 });
             } else {
-                alert(`동기화 실패: ${err.message}`);
+                toast.error(`동기화 실패: ${err.message}`);
             }
         } finally {
             setIsSyncing(false);
         }
     };
 
-    // 3. 인증 관련
+    // 2. 인증 관련
     const handleAuthenticated = () => {
         setIsAuthenticated(true);
         setShowAuthModal(false);
-        handleSync(); // 로그인 성공 시 자동 동기화
+        handleSync();
     };
 
     const handleLogout = () => {
@@ -111,88 +60,68 @@ function App() {
         }
     };
 
-    // 4. 새 메모 추가 / 삭제 / 저장 로직 (기존과 동일)
-    const handleAddMemo = async () => {
-        try {
-            await database.write(async () => {
-                const newMemo = await database.get<Memo>('memos').create((m) => {
-                    m._raw.id = crypto.randomUUID(); // 명시적으로 UUID 생성
-                    m.title = 'New Note';
-                    m.content = '';
-                    m.version = 1;
-                    m.lastSyncedVersion = 0; // 신규 메모는 서버 버전 0에서 시작
-                    m.userId = 'local_user';
-                });
-                setSelectedMemo(newMemo);
-            });
-        } catch (err) {
-            console.error('Create Error:', err);
-        }
-    };
-
-    const handleDeleteMemo = async (memoToDelete: Memo) => {
-        if (!confirm('정말 이 메모를 삭제하시겠습니까?')) return;
-        try {
-            await database.write(async () => {
-                // 삭제하기 전에 버전을 1 증가시켜서 서버가 '새로운 변경사항'으로 인식하게 함
-                await memoToDelete.update(m => {
-                    m.version += 1;
-                });
-                await memoToDelete.markAsDeleted();
-            });
-            if (selectedMemo?.id === memoToDelete.id) {
-                setSelectedMemo(memos.find(m => m.id !== memoToDelete.id) || null);
-            }
-        } catch (err) {
-            console.error('Delete Error:', err);
-        }
-    };
-
-    const handleSave = async (newContent: string) => {
-        if (!selectedMemo) return;
-        try {
-            await database.write(async () => {
-                await selectedMemo.update((m) => {
-                    m.content = newContent;
-                    const lines = newContent.split('\n');
-                    const firstLine = lines[0].replace(/^#\s+/, '').substring(0, 50);
-                    m.title = firstLine || 'Untitled';
-                    m.version += 1; // 버전 증가
-                });
-            });
-        } catch (err) {
-            console.error('Save Error:', err);
-        }
-    };
-
     if (loading) return <div style={{color: 'white', padding: 20, backgroundColor: '#1a1a1a', height: '100vh'}}>Loading Onix...</div>;
 
     return (
         <div style={{display: 'flex', width: '100vw', height: '100vh', backgroundColor: '#282c34', position: 'relative'}}>
+            <Toaster position="top-right" />
+            
             <Sidebar 
                 memos={memos} 
                 selectedMemoId={selectedMemo?.id}
                 onSelectMemo={setSelectedMemo}
-                onAddMemo={handleAddMemo}
-                onDeleteMemo={handleDeleteMemo}
+                onAddMemo={addMemo}
+                onDeleteMemo={deleteMemo}
                 isAuthenticated={isAuthenticated}
                 onSync={handleSync}
                 onLoginClick={() => setShowAuthModal(true)}
                 onLogout={handleLogout}
                 isSyncing={isSyncing}
             />
-            <div style={{flex: 1, height: '100%'}}>
+            <div style={{flex: 1, height: '100%', display: 'flex', flexDirection: 'column'}}>
+                {/* 충돌 알림 배너 */}
+                {hasConflict && selectedMemo && (
+                    <div style={styles.conflictBanner}>
+                        <span>⚠️ 충돌 감지! 서버 데이터(웹 수정본)를 가져오시겠습니까, 아니면 버려진 내 데이터(일렉트론 수정본)를 복구하시겠습니까?</span>
+                        <div style={{display: 'flex', gap: '10px'}}>
+                            <button 
+                                onClick={() => {
+                                    resolveConflictWithServer(selectedMemo.id);
+                                    setHasConflict(false);
+                                }}
+                                style={{...styles.restoreButton, backgroundColor: '#28a745'}}
+                            >
+                                Take Server Version
+                            </button>
+                            <button 
+                                onClick={() => {
+                                    restoreMemo(selectedMemo.id);
+                                    setHasConflict(false);
+                                }}
+                                style={styles.restoreButton}
+                            >
+                                Restore My Changes
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 {selectedMemo ? (
-                    <Editor key={selectedMemo.id} value={selectedMemo.content || ''} onChange={handleSave}></Editor>
+                    <div style={{flex: 1}}>
+                        <Editor 
+                            key={selectedMemo.id} 
+                            value={selectedMemo.content || ''} 
+                            onChange={saveMemo} 
+                        />
+                    </div>
                 ) : (
                     <div style={styles.emptyState}>
                         <p>작성된 메모가 없습니다. 새 메모를 추가해보세요!</p>
-                        <button onClick={handleAddMemo} style={styles.emptyButton}>+ Create New Note</button>
+                        <button onClick={addMemo} style={styles.emptyButton}>+ Create New Note</button>
                     </div>
                 )}
             </div>
 
-            {/* 인증 모달 (간단하게 구현) */}
             {showAuthModal && (
                 <div style={styles.modalOverlay}>
                     <div style={styles.modalContent}>
@@ -206,6 +135,26 @@ function App() {
 }
 
 const styles: { [key: string]: React.CSSProperties } = {
+    conflictBanner: {
+        backgroundColor: '#fff3cd',
+        color: '#856404',
+        padding: '12px 20px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        borderBottom: '1px solid #ffeeba',
+        fontSize: '14px',
+        fontWeight: '500'
+    },
+    restoreButton: {
+        backgroundColor: '#856404',
+        color: 'white',
+        border: 'none',
+        padding: '6px 12px',
+        borderRadius: '4px',
+        cursor: 'pointer',
+        fontSize: '12px'
+    },
     emptyState: {
         display: 'flex',
         flexDirection: 'column',

@@ -5,6 +5,7 @@ import {DataSource, MoreThan, In,Repository} from "typeorm";
 import {CreateMemoDto} from "./dto/create-memo.dto";
 import {UpdateMemoDto} from "./dto/update-memo.dto";
 import {PushMemoDto} from "./dto/push-memo.dto";
+import {MemoHistory} from "./entities/memo-history.entity";
 
 
 @Injectable()
@@ -12,8 +13,17 @@ export class MemosService {
     constructor(
         @InjectRepository(Memo)
         private readonly memoRepository: Repository<Memo>,
+        @InjectRepository(MemoHistory)
+        private readonly memoHistoryRepository: Repository<MemoHistory>,
         private readonly dataSource: DataSource,
     ) {}
+
+    async findHistories(memoId: string, userId: string): Promise<MemoHistory[]> {
+        return await this.memoHistoryRepository.find({
+            where: { memoId, userId },
+            order: { createdAt: 'DESC' },
+        });
+    }
 
     async create(createMemoDTO: CreateMemoDto, userId: string): Promise<Memo> {
         const memo = this.memoRepository.create({...createMemoDTO, userId: userId});
@@ -131,26 +141,30 @@ export class MemosService {
 
             const existingMemosMap = new Map(existingMemos.map(m => [m.id, m]));
             const toSave: Memo[] = [];
+            const historiesToSave: MemoHistory[] = [];
 
             for (const clientMemo of pushedMemos) {
                 const serverMemo = existingMemosMap.get(clientMemo.id);
 
                 if (serverMemo) {
                     // [고도화된 충돌 감지 로직]
-                    // 클라이언트가 편집을 시작한 기준(baseVersion)이 서버의 현재 버전과 같은지 확인
                     const isBaseVersionMatch = clientMemo.baseVersion === serverMemo.version;
+                    const isVersionHigher = clientMemo.version > serverMemo.version;
                     const isDeletionRequest = !!clientMemo.deletedAt;
 
-                    // 1. 기준 버전이 일치하고 클라이언트 버전이 더 높을 때 (정상 업데이트)
-                    // 2. 삭제 요청인 경우 (삭제는 우선권 부여 가능, 혹은 동일하게 체크 가능)
-                    if (isBaseVersionMatch && clientMemo.version > serverMemo.version) {
+                    console.log(`[Sync Debug] Memo ID: ${clientMemo.id}`);
+                    console.log(` - Client: version=${clientMemo.version}, baseVersion=${clientMemo.baseVersion}`);
+                    console.log(` - Server: version=${serverMemo.version}`);
+                    console.log(` - Match: baseMatch=${isBaseVersionMatch}, higher=${isVersionHigher}`);
+
+                    if (isBaseVersionMatch && isVersionHigher) {
                         if (clientMemo.deletedAt) {
                             serverMemo.version = clientMemo.version;
                             serverMemo.updatedAt = clientMemo.updatedAt;
                             serverMemo.deletedAt = clientMemo.deletedAt;
                             results.push({id: clientMemo.id, status: 'DELETED'});
                         } else {
-                            serverMemo.title = clientMemo.title;
+                            serverMemo.title = clientMemo.title || '';
                             serverMemo.content = clientMemo.content;
                             serverMemo.version = clientMemo.version;
                             serverMemo.updatedAt = clientMemo.updatedAt;
@@ -160,14 +174,24 @@ export class MemosService {
                         toSave.push(serverMemo);
                     } else if (isDeletionRequest && clientMemo.version > serverMemo.version) {
                         // 삭제의 경우 baseVersion이 다르더라도 클라이언트가 삭제를 원한다면 수용할 수도 있음 (정책 결정 사항)
-                        // 여기서는 일단 버전이 높으면 수용하는 기존 로직 유지
                         serverMemo.version = clientMemo.version;
                         serverMemo.deletedAt = clientMemo.deletedAt;
                         toSave.push(serverMemo);
                         results.push({id: clientMemo.id, status: 'DELETED'});
                     } else {
-                        // 기준 버전이 다르거나 클라이언트 버전이 낮으면 충돌!
-                        console.warn(`[Sync Conflict] Memo ${clientMemo.id} rejected. Client baseVersion: ${clientMemo.baseVersion}, Server version: ${serverMemo.version}`);
+                        // 기준 버전이 다르거나 클라이언트 버전이 낮으면 충돌! -> 히스토리에 기록
+                        console.warn(`[Sync Conflict] Memo ${clientMemo.id} archived. Client baseVersion: ${clientMemo.baseVersion}, Server version: ${serverMemo.version}`);
+                        
+                        const history = transactionalEntityManager.create(MemoHistory, {
+                            memoId: clientMemo.id,
+                            userId: userId,
+                            title: clientMemo.title || '',
+                            content: clientMemo.content,
+                            version: clientMemo.version,
+                            baseVersion: clientMemo.baseVersion,
+                            serverVersion: serverMemo.version,
+                        });
+                        historiesToSave.push(history);
                         results.push({id: clientMemo.id, status: 'CONFLICT'});
                     }
                 } else {
@@ -184,6 +208,11 @@ export class MemosService {
             // 2. 변경사항 일괄 저장
             if (toSave.length > 0) {
                 await transactionalEntityManager.save(Memo, toSave);
+            }
+
+            // 3. 충돌 히스토리 일괄 저장
+            if (historiesToSave.length > 0) {
+                await transactionalEntityManager.save(MemoHistory, historiesToSave);
             }
         });
 

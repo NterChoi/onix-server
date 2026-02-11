@@ -1,13 +1,14 @@
 import { Module } from '@nestjs/common';
 import {TypeOrmModule} from "@nestjs/typeorm";
 import {Memo} from "./entities/memo.entity";
+import { MemoHistory } from './entities/memo-history.entity';
 import { MemosService } from './memos.service';
 import { MemosController } from './memos.controller';
 import {UsersModule} from "../users/users.module";
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([Memo]),
+        TypeOrmModule.forFeature([Memo, MemoHistory]),
         UsersModule
     ],
     controllers: [MemosController],

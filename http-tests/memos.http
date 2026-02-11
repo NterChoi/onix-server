@@ -44,7 +44,7 @@ Authorization: Bearer {{loginA.response.body.access_token}}
   "content": "Original content"
 }
 
-### [정상 업데이트] (Send Request를 눌러서 확인하세요)
+### [정상 업데이트]
 POST http://localhost:3000/memos/push
 Content-Type: application/json
 Authorization: Bearer {{loginA.response.body.access_token}}
@@ -64,7 +64,7 @@ Authorization: Bearer {{loginA.response.body.access_token}}
   ]
 }
 
-### [충돌 테스트] (위의 '정상 업데이트'를 먼저 실행한 후 클릭)
+### [충돌 테스트]
 POST http://localhost:3000/memos/push
 Content-Type: application/json
 Authorization: Bearer {{loginA.response.body.access_token}}
@@ -83,3 +83,7 @@ Authorization: Bearer {{loginA.response.body.access_token}}
     }
   ]
 }
+
+### [히스토리 조회]
+GET http://localhost:3000/memos/{{createConflictMemo.response.body.id}}/histories
+Authorization: Bearer {{loginA.response.body.access_token}}
