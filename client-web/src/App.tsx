@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Editor } from "./components/Editor.tsx";
+import { MarkdownPreview } from "./components/MarkdownPreview.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { AuthScreen } from "./components/AuthScreen.tsx";
 import { syncOnix } from './watermelondb/sync';
@@ -23,21 +24,21 @@ function App() {
     const [isAuthenticated, setIsAuthenticated] = useState(!!getToken());
     const [showAuthModal, setShowAuthModal] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
-    const [hasConflict, setHasConflict] = useState(false);
+    const [conflictingIds, setConflictingIds] = useState<string[]>([]);
 
     // 1. 동기화 실행
     const handleSync = async () => {
         if (isSyncing) return;
         setIsSyncing(true);
-        setHasConflict(false);
         try {
             await syncOnix();
+            setConflictingIds([]); // 성공 시 충돌 목록 초기화
             toast.success('동기화 완료!');
         } catch (err: any) {
             console.error('Sync Error:', err);
             if (err.message === 'CONFLICT_DETECTED') {
-                setHasConflict(true);
-                toast.error('동기화 중 충돌이 발생했습니다. 서버 아카이브를 확인하세요.', { duration: 5000 });
+                setConflictingIds(err.conflictIds || []);
+                toast.error('동기화 중 충돌이 발생했습니다.', { duration: 5000 });
             } else {
                 toast.error(`동기화 실패: ${err.message}`);
             }
@@ -80,23 +81,23 @@ function App() {
             />
             <div style={{flex: 1, height: '100%', display: 'flex', flexDirection: 'column'}}>
                 {/* 충돌 알림 배너 */}
-                {hasConflict && selectedMemo && (
+                {selectedMemo && conflictingIds.includes(selectedMemo.id) && (
                     <div style={styles.conflictBanner}>
-                        <span>⚠️ 충돌 감지! 서버 데이터(웹 수정본)를 가져오시겠습니까, 아니면 버려진 내 데이터(일렉트론 수정본)를 복구하시겠습니까?</span>
+                        <span>⚠️ 이 메모에 충돌이 있습니다! 서버 데이터를 가져올까요, 내 수정을 복구할까요?</span>
                         <div style={{display: 'flex', gap: '10px'}}>
                             <button 
-                                onClick={() => {
-                                    resolveConflictWithServer(selectedMemo.id);
-                                    setHasConflict(false);
+                                onClick={async () => {
+                                    await resolveConflictWithServer(selectedMemo.id);
+                                    setConflictingIds(prev => prev.filter(id => id !== selectedMemo.id));
                                 }}
                                 style={{...styles.restoreButton, backgroundColor: '#28a745'}}
                             >
                                 Take Server Version
                             </button>
                             <button 
-                                onClick={() => {
-                                    restoreMemo(selectedMemo.id);
-                                    setHasConflict(false);
+                                onClick={async () => {
+                                    await restoreMemo(selectedMemo.id);
+                                    setConflictingIds(prev => prev.filter(id => id !== selectedMemo.id));
                                 }}
                                 style={styles.restoreButton}
                             >
@@ -107,12 +108,19 @@ function App() {
                 )}
 
                 {selectedMemo ? (
-                    <div style={{flex: 1}}>
-                        <Editor 
-                            key={selectedMemo.id} 
-                            value={selectedMemo.content || ''} 
-                            onChange={saveMemo} 
-                        />
+                    <div style={{flex: 1, display: 'flex', flexDirection: 'row', overflow: 'hidden'}}>
+                        <div style={{flex: 1, borderRight: '1px solid #3e4451'}}>
+                            <Editor 
+                                key={selectedMemo.id} 
+                                value={selectedMemo.content || ''} 
+                                onChange={saveMemo} 
+                                onSave={(val) => {
+                                    saveMemo(val, true);
+                                    handleSync();
+                                }}
+                            />
+                        </div>
+                        <MarkdownPreview content={selectedMemo.content || ''} />
                     </div>
                 ) : (
                     <div style={styles.emptyState}>

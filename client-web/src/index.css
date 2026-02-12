@@ -6,3 +6,15 @@ body, html, #root {
   overflow: hidden;
   background-color: #282c34;
 }
+
+/* Markdown Preview Styles */
+.markdown-preview h1 { border-bottom: 1px solid #3e4451; padding-bottom: 0.3em; margin-top: 24px; color: #e06c75; }
+.markdown-preview h2 { border-bottom: 1px solid #3e4451; padding-bottom: 0.3em; color: #d19a66; }
+.markdown-preview h3 { color: #61afef; }
+.markdown-preview blockquote { border-left: 4px solid #5c6370; padding-left: 16px; color: #5c6370; font-style: italic; }
+.markdown-preview code { background-color: rgba(40, 44, 52, 0.5); padding: 0.2em 0.4em; border-radius: 6px; font-family: 'JetBrains Mono', monospace; font-size: 85%; }
+.markdown-preview pre { background-color: #1e2127; padding: 16px; border-radius: 8px; overflow: auto; }
+.markdown-preview ul, .markdown-preview ol { padding-left: 2em; }
+.markdown-preview img { max-width: 100%; height: auto; }
+.markdown-preview table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+.markdown-preview th, .markdown-preview td { border: 1px solid #3e4451; padding: 6px 13px; }

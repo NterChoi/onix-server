@@ -65,11 +65,11 @@ export const useMemos = () => {
         }
     };
 
-    const saveMemo = async (newContent: string) => {
+    const saveMemo = async (newContent: string, immediate = false) => {
         if (!selectedMemo) return;
         if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
 
-        saveTimeoutRef.current = setTimeout(async () => {
+        const performSave = async () => {
             try {
                 await database.write(async () => {
                     // @ts-ignore
@@ -86,7 +86,13 @@ export const useMemos = () => {
                 console.error('Save Error:', err);
                 toast.error('저장 실패');
             }
-        }, 500);
+        };
+
+        if (immediate) {
+            await performSave();
+        } else {
+            saveTimeoutRef.current = setTimeout(performSave, 500);
+        }
     };
 
     // 6. 충돌 메모 복구 (서버가 거절한 내 데이터를 다시 가져오고 싶을 때)
