@@ -2,7 +2,7 @@ import {
     Column,
     CreateDateColumn,
     DeleteDateColumn,
-    Entity, JoinColumn, ManyToOne,
+    Entity, Index, JoinColumn, ManyToOne,
     PrimaryGeneratedColumn,
     UpdateDateColumn,
     VersionColumn
@@ -10,6 +10,8 @@ import {
 import {User} from "../../users/entities/user.entity";
 
 @Entity('memos')
+@Index(['userId', 'updatedAt'])
+@Index(['userId', 'deletedAt'])
 export class Memo{
     @PrimaryGeneratedColumn('uuid')
     id: string;

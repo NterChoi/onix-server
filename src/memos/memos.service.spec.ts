@@ -4,6 +4,7 @@ import {before} from "node:test";
 import {Test, TestingModule} from "@nestjs/testing";
 import {getRepositoryToken} from "@nestjs/typeorm";
 import {Memo} from "./entities/memo.entity";
+import {MemoHistory} from "./entities/memo-history.entity";
 import {MemosModule} from "./memos.module";
 import {PushMemoDto} from "./dto/push-memo.dto";
 import {last} from "rxjs";
@@ -12,7 +13,11 @@ type MockRepository<T extends object> = Partial<Record<keyof Repository<T>, jest
 
 const mockMemoRepository = {
     find: jest.fn(),
-}
+};
+const mockMemoHistoryRepository = {
+    create: jest.fn(),
+    save: jest.fn(),
+};
 const mockDataSource = {
     transaction: jest.fn(),
 };
@@ -21,6 +26,7 @@ describe('MemoService', () => {
     let service: MemosService;
     let dataSource: DataSource;
     let memoRepository: MockRepository<Memo>;
+    let memoHistoryRepository: MockRepository<MemoHistory>;
 
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
@@ -33,6 +39,10 @@ describe('MemoService', () => {
                 {
                     provide: getRepositoryToken(Memo),
                     useValue: mockMemoRepository,
+                },
+                {
+                    provide: getRepositoryToken(MemoHistory),
+                    useValue: mockMemoHistoryRepository,
                 }
             ],
         }).compile();
@@ -40,6 +50,7 @@ describe('MemoService', () => {
         service = module.get<MemosService>(MemosService);
         dataSource = module.get<DataSource>(DataSource);
         memoRepository = module.get<MockRepository<Memo>>(getRepositoryToken(Memo));
+        memoHistoryRepository = module.get<MockRepository<MemoHistory>>(getRepositoryToken(MemoHistory));
     });
 
     afterEach(() => {
@@ -56,18 +67,20 @@ describe('MemoService', () => {
             const userId = 'test-user-id';
             const clientMemo = {
                 id: 'client-memo-id-1',
+                title: '새 메모',
                 content: '새로운 메모 내용',
+                version: 1,
+                baseVersion: 0,
                 createdAt: new Date(),
                 updatedAt: new Date(),
                 deletedAt: null,
             };
-            const pushMemoDto: PushMemoDto = {pushedMemos: [clientMemo]};
+            const pushMemoDto: PushMemoDto = {pushedMemos: [clientMemo as any]};
 
             // 트랜잭션 내에서 사용될 가짜 EntityManager를 설정
             const mockEntityManager = {
-                findOne: jest.fn().mockResolvedValue(null),
-                update: jest.fn(),
-                create: jest.fn().mockReturnValue(clientMemo),
+                find: jest.fn().mockResolvedValue([]), // 기존 메모가 없음을 가정
+                create: jest.fn().mockImplementation((entity, data) => data),
                 save: jest.fn()
             };
 
@@ -79,108 +92,102 @@ describe('MemoService', () => {
 
             // 3. Then (결과 검증)
             expect(result.results[0]).toEqual({ id: clientMemo.id, status: 'CREATED'});
-            expect(mockEntityManager.findOne).toHaveBeenCalledTimes(1);
+            expect(mockEntityManager.find).toHaveBeenCalledTimes(1);
             expect(mockEntityManager.create).toHaveBeenCalledTimes(1);
-            expect(mockEntityManager.save).toHaveBeenCalledTimes(1);
-            expect(mockEntityManager.update).not.toHaveBeenCalled();
+            expect(mockEntityManager.save).toHaveBeenCalledWith(Memo, expect.any(Array));
         });
 
-        // TODO: 시나리오 2: 서버보다 최신 메모를 push 했을 때 (UPDATE)
-        it('서버보다 최신 버전의 메모는 "UPDATED" 상태로 처리되어야 한다', async () => {
+        it('서버보다 최신 버전의 메모(baseVersion 일치)는 "UPDATED" 상태로 처리되어야 한다', async () => {
             // 1. Given (준비)
             const userId = 'test-user-id';
-            const serverTime = new Date('2025-01-01T10:00:00Z');
-            const clientTime = new Date('2025-01-01T11:00:00Z');
-
             const clientMemo = {
                 id: 'existing-memo-id',
+                title: '수정된 제목',
                 content: '수정된 메모 내용',
-                createdAt: serverTime,
-                updatedAt: clientTime,
+                version: 2,
+                baseVersion: 1, // 서버의 현재 버전과 일치
+                updatedAt: new Date(),
                 deletedAt: null,
             };
 
             const serverMemo = {
                 id: 'existing-memo-id',
-                content: '원본 내용 메모',
-                createdAt: serverTime,
-                updatedAt: serverTime,
+                title: '원본 제목',
+                content: '원본 내용',
+                version: 1,
+                updatedAt: new Date('2025-01-01'),
                 deletedAt: null,
             };
 
-            const pushMemoDto: PushMemoDto = {pushedMemos: [clientMemo]};
+            const pushMemoDto: PushMemoDto = {pushedMemos: [clientMemo as any]};
 
-            // EntityManager 설정 : findOne이 'serverMemo'를 반환하도록 설정
             const mockEntityManager = {
-                findOne: jest.fn().mockResolvedValue(serverMemo),
-                update: jest.fn(),
-                create: jest.fn(),
+                find: jest.fn().mockResolvedValue([serverMemo]),
                 save: jest.fn(),
             };
             mockDataSource.transaction.mockImplementation(async (callback) => callback(mockEntityManager));
 
-            // 2. When (실행)
+            // 2. When
             const result = await service.pushMemos(userId, pushMemoDto);
 
-            // 3. Then (검증)
-            expect(result.results[0]).toEqual({ id : clientMemo.id, status: 'UPDATED'});
-            expect(mockEntityManager.findOne).toHaveBeenCalledTimes(1);
-            expect(mockEntityManager.update).toHaveBeenCalledTimes(1);
-
-            // update가 올바른 인자들로 호출되었는지 상세 검증
-            expect(mockEntityManager.update).toHaveBeenCalledWith(Memo, serverMemo.id, {
-                content: clientMemo.content,
-                updatedAt: clientMemo.updatedAt,
-                deletedAt: clientMemo.deletedAt,
-            });
-
-            expect(mockEntityManager.create).not.toHaveBeenCalled();
-            expect(mockEntityManager.save).not.toHaveBeenCalled();
-
+            // 3. Then
+            expect(result.results[0]).toEqual({ id: clientMemo.id, status: 'UPDATED'});
+            expect(mockEntityManager.save).toHaveBeenCalledWith(Memo, expect.arrayContaining([
+                expect.objectContaining({
+                    id: clientMemo.id,
+                    version: 2,
+                    title: '수정된 제목'
+                })
+            ]));
         });
-        // TODO: 시나리오 3: 서버와 같거나 오래된 메모를 push 했을 때 (IGNORE)
-        it('서버보다 오래되거나 같은 버전의 메모는 "IGNORED" 상태로 처리되어야 한다.', async () => {
+
+        it('baseVersion이 일치하지 않으면 "CONFLICT" 상태로 처리되고 히스토리에 저장되어야 한다', async () => {
             // 1. Given (준비)
             const userId = 'test-user-id';
-            const clientTime = new Date('2025-01-01T10:00:00Z');
-            const serverTime = new Date('2025-01-01T11:00:00Z');
-
             const clientMemo = {
-                id: 'existing-memo-id',
-                content: '오래된 클라이언트 메모 내용',
-                createdAt: clientTime,
-                updatedAt: clientTime,
+                id: 'conflict-memo-id',
+                title: '내 수정본',
+                content: '충돌하는 내용',
+                version: 5,
+                baseVersion: 3, // 서버는 이미 4버전인데 클라이언트는 3에서 수정을 시작함
+                updatedAt: new Date(),
                 deletedAt: null,
             };
-            const serverMemo = {
-                id: 'existing-memo-id',
-                content: '최신 서버 메모 내용',
-                createdAt: clientTime,
-                updatedAt: serverTime,
-                deletedAt: null,
-            };
-            const pushMemoDto: PushMemoDto = {pushedMemos: [clientMemo]};
 
-            // EntityManager 설정 : findOnedl 'serverMemo'를 반환하도록 설정
+            const serverMemo = {
+                id: 'conflict-memo-id',
+                title: '서버의 최신본',
+                content: '누군가 먼저 수정한 내용',
+                version: 4,
+                updatedAt: new Date(),
+                deletedAt: null,
+            };
+
+            const pushMemoDto: PushMemoDto = {pushedMemos: [clientMemo as any]};
+
             const mockEntityManager = {
-                findOne: jest.fn().mockResolvedValue(serverMemo),
-                update: jest.fn(),
-                create: jest.fn(),
+                find: jest.fn().mockResolvedValue([serverMemo]),
+                create: jest.fn().mockImplementation((entity, data) => data),
                 save: jest.fn(),
             };
             mockDataSource.transaction.mockImplementation(async (callback) => callback(mockEntityManager));
 
-            // 2. When (실행)
+            // 2. When
             const result = await service.pushMemos(userId, pushMemoDto);
 
-            // 3. Then (검증)
-            expect(result.results[0]).toEqual({ id: clientMemo.id, status: "IGNORED"});
-            expect(mockEntityManager.findOne).toHaveBeenCalledTimes(1);
-
-            // 가장 중요한 검증 : DB를 변경하는 어떤 함수도 호출되지 않았어야 함
-            expect(mockEntityManager.update).not.toHaveBeenCalled();
-            expect(mockEntityManager.create).not.toHaveBeenCalled();
-            expect(mockEntityManager.save).not.toHaveBeenCalled();
+            // 3. Then
+            expect(result.results[0]).toEqual({ id: clientMemo.id, status: 'CONFLICT'});
+            
+            // MemoHistory가 저장되는지 확인
+            expect(mockEntityManager.create).toHaveBeenCalledWith(MemoHistory, expect.objectContaining({
+                memoId: clientMemo.id,
+                serverVersion: 4,
+                baseVersion: 3
+            }));
+            expect(mockEntityManager.save).toHaveBeenCalledWith(MemoHistory, expect.any(Array));
+            
+            // 원본 Memo 테이블은 업데이트되지 않아야 함
+            expect(mockEntityManager.save).not.toHaveBeenCalledWith(Memo, expect.any(Array));
         });
     })
 

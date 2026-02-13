@@ -1,7 +1,7 @@
 import {
   Column,
   CreateDateColumn,
-  Entity,
+  Entity, Index,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
@@ -10,6 +10,8 @@ import { User } from '../../users/entities/user.entity';
 import { Memo } from './memo.entity';
 
 @Entity('memo_histories')
+@Index(['memoId', 'userId'])
+@Index(['userId', 'createdAt'])
 export class MemoHistory {
   @PrimaryGeneratedColumn('uuid')
   id: string;
