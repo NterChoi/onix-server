@@ -2,11 +2,14 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { MemosModule } from './memos/memos.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
+import { UploadsModule } from './uploads/uploads.module';
 
 @Module({
   imports: [
@@ -16,7 +19,6 @@ import { AuthModule } from './auth/auth.module';
     }),
 
     // 2. DB 연결 설정 (비동기 방식: forRootAsync)
-    // 왜 Async인가? 환경변수(ConfigService)를 다 읽은 후에 DB에 붙어야 하니까요.
     TypeOrmModule.forRootAsync({
       useFactory: () => ({
         type: 'mysql',
@@ -25,21 +27,22 @@ import { AuthModule } from './auth/auth.module';
         username: process.env.DB_USERNAME,
         password: process.env.DB_PASSWORD,
         database: process.env.DB_DATABASE,
-
-        // 엔티티(테이블 정의)를 자동으로 불러옵니다.
         autoLoadEntities: true,
-
-        // 개발 환경에서만 true! (서버 켤 때마다 DB 스키마를 코드에 맞게 뜯어고침)
         synchronize: true,
         timezone: 'Z'
       }),
     }),
 
+    // 3. 정적 파일 서빙 (업로드된 이미지 접근용)
+    ServeStaticModule.forRoot({
+      rootPath: join(__dirname, '..', 'uploads'),
+      serveRoot: '/uploads',
+    }),
+
     MemosModule,
-
     UsersModule,
-
     AuthModule,
+    UploadsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
